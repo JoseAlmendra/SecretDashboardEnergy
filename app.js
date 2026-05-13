@@ -12,8 +12,15 @@ app.use(express.static('public'));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // Esta opción es clave para evitar el error de red inalcanzable (IPv6)
+  max: 10,
+  idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 });
+
+// Forzamos a Node.js a preferir IPv4 globalmente
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 
 pool.connect((err, client, release) => {
   if (err) {
