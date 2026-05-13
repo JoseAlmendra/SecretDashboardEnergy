@@ -50,6 +50,8 @@ app.post('/login', async (req, res) => {
   }
 });
 
+const PORT = process.env.PORT || 8080;
+
 app.listen(PORT, () => {
     console.log(`Servidor en puerto ${PORT}`);
 });
