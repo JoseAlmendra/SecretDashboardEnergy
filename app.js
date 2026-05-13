@@ -14,6 +14,14 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('Fallo crítico al conectar con Supabase:', err.stack);
+  }
+  console.log('Conexión con Supabase establecida exitosamente.');
+  release();
+});
+
 app.post('/login', async (req, res) => {
   // Ahora recibimos 'nombre' y 'password' desde el cuerpo de la petición
   const { nombre, password } = req.body;
