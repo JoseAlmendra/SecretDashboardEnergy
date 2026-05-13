@@ -16,8 +16,12 @@ app.use(express.static('public'));
 
 // 2. Base de Datos
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  user: 'postgres.mhzuhpuhymhiklfsehnd', // Tu usuario largo del pooler
+  host: 'aws-1-us-east-1.pooler.supabase.com',
+  database: 'postgres',
+  password: 'FHO9vcC1J5eM70Eg',
+  port: 6543,
+  ssl: { rejectUnauthorized: false },
 });
 
 // 3. Verificación de Conexión
