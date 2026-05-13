@@ -1,35 +1,36 @@
 require('dotenv').config();
 
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
 
 const app = express();
 
-// 🔥 IMPORTANTE
 app.use(express.json());
 
 // DB
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: { rejectUnauthorized: false },
+    family: 4
 });
 
-// conexión
 pool.connect((err) => {
     if (err) {
         return console.error('Fallo de conexión:', err.stack);
     }
     console.log('Conexión con Supabase exitosa.');
 });
+
 console.log("DATABASE_URL =", process.env.DATABASE_URL);
+
 // frontend
 app.use(express.static(path.join(__dirname, 'frontend/dist')));
 
-// fallback correcto
-app.get(/.*/, (req, res) => {
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'frontend/dist/index.html'));
 });
 
@@ -57,7 +58,6 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// PORT FIX
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
