@@ -1,9 +1,9 @@
-
 require('dotenv').config();
 const dns = require('dns');
 
-// CRÍTICO: Esto debe ir antes de requerir 'pg' y crear el Pool
-dns.setDefaultResultOrder('ipv4first');
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
 
 const express = require('express');
 const { Pool } = require('pg');
@@ -11,9 +11,11 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// 2. Middlewares
 app.use(express.json());
 app.use(express.static('public'));
 
+// 3. Configuración de la Base de Datos
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -22,10 +24,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
-// Forzamos a Node.js a preferir IPv4 globalmente
-const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first');
-
+// 4. Verificación de Conexión Inicial
 pool.connect((err, client, release) => {
   if (err) {
     return console.error('Fallo crítico al conectar con Supabase:', err.stack);
@@ -34,12 +33,11 @@ pool.connect((err, client, release) => {
   release();
 });
 
+// 5. Rutas
 app.post('/login', async (req, res) => {
-  // Ahora recibimos 'nombre' y 'password' desde el cuerpo de la petición
   const { nombre, password } = req.body;
 
   try {
-    // Cambiamos la consulta para buscar por la columna 'nombre' en lugar de 'correo'
     const query = 'SELECT * FROM usuarios WHERE nombre = $1 AND password = $2';
     const result = await pool.query(query, [nombre, password]);
 
@@ -54,7 +52,8 @@ app.post('/login', async (req, res) => {
     }
   } catch (err) {
     console.error("Error en el login:", err);
-    res.status(500).send("Error en el servidor");
+    // Enviamos JSON para evitar errores de sintaxis en el frontend
+    res.status(500).json({ mensaje: "Error en el servidor" });
   }
 });
 
@@ -62,6 +61,7 @@ app.get('/api/test', (req, res) => {
     res.json({ message: "API funcionando" });
 });
 
+// 6. Inicio del Servidor
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
