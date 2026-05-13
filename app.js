@@ -12,8 +12,13 @@ const path = require('path');
 
 const app = express();
 
+// Creamos un objeto de configuración que extrae los datos de la URL de Render
+const connectionString = process.env.DATABASE_URL;
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: connectionString,
+    // Forzamos el usuario largo si la URL no se parsea bien
+    user: connectionString.split('://')[1].split(':')[0], 
     ssl: {
         rejectUnauthorized: false
     }
@@ -23,10 +28,10 @@ pool.connect((err, client, release) => {
     if (err) {
         return console.error('Fallo de conexión:', err.stack);
     }
-
     console.log('Conexión con Supabase exitosa.');
     release();
 });
+
 console.log(process.env.DATABASE_URL);
 
 app.use(express.json());
