@@ -24,7 +24,7 @@ pool.connect((err) => {
     }
     console.log('Conexión con Supabase exitosa.');
 });
-
+console.log("DATABASE_URL =", process.env.DATABASE_URL);
 // frontend
 app.use(express.static(path.join(__dirname, 'frontend/dist')));
 
