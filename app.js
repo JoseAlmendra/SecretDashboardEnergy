@@ -20,6 +20,8 @@ pool.connect((err, client, release) => {
     console.log('Conexión con Supabase exitosa.');
     release();
 });
+console.log(process.env.DATABASE_URL);
+
 
 app.get('/', (req, res) => {
     res.send('Servidor funcionando');
