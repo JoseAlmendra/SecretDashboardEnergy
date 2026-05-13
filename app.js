@@ -1,4 +1,10 @@
 require('dotenv').config();
+const dns = require('dns');
+
+// Esto obliga a Node.js a buscar direcciones IPv4 antes que IPv6
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
 
 const express = require('express');
 const { Pool } = require('pg');
