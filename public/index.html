@@ -65,6 +65,7 @@
       />
 
       <input
+        id="password" 
         type="password"
         placeholder="Contraseña"
         class="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -89,10 +90,10 @@
     
     form.addEventListener('submit', async (e) => {
       e.preventDefault(); // Evita que la página se recargue
-    
+
       const nombre = document.getElementById('nombre').value;
       const password = document.getElementById('password').value;
-    
+
       try {
         // Enviamos los datos a tu servidor en Render
         const response = await fetch('/login', {
@@ -100,9 +101,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nombre, password })
         });
-      
+
         const data = await response.json();
-      
+
         if (response.ok) {
           alert(`¡Bienvenido ${data.usuario}! Rol: ${data.rol}`);
           // Aquí podrías redireccionar al dashboard real:
