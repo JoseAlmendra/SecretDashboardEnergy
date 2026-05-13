@@ -23,14 +23,14 @@ pool.connect((err, client, release) => {
 });
 console.log(process.env.DATABASE_URL);
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 // 4. Ruta de Login
 app.post('/login', async (req, res) => {
-  const { nombre, password } = app.use(express.json());
+  const { nombre, password } = req.body;
   try {
     const query = 'SELECT * FROM usuarios WHERE nombre = $1 AND password = $2';
     const result = await pool.query(query, [nombre, password]);
