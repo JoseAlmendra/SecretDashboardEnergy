@@ -1,18 +1,24 @@
 const express = require('express');
 const { Pool } = require('pg');
 
-require('dotenv').config()
+require('dotenv').config();
+const dns = require('dns');
+
+// CRÍTICO: Esto debe ir antes de requerir 'pg' y crear el Pool
+dns.setDefaultResultOrder('ipv4first');
+
+const express = require('express');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-app.use(express.json());
 
+app.use(express.json());
 app.use(express.static('public'));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  // Esta opción es clave para evitar el error de red inalcanzable (IPv6)
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
