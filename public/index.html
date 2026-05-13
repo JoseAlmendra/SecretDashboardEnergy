@@ -58,8 +58,9 @@
     <form class="space-y-4">
 
       <input
-        type="email"
-        placeholder="Correo"
+        id="nombre"
+        type="text"
+        placeholder="Usuario"
         class="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
@@ -83,6 +84,37 @@
     </p>
 
   </div>
-
+  <script>
+    const form = document.querySelector('form');
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); // Evita que la página se recargue
+    
+      const nombre = document.getElementById('nombre').value;
+      const password = document.getElementById('password').value;
+    
+      try {
+        // Enviamos los datos a tu servidor en Render
+        const response = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, password })
+        });
+      
+        const data = await response.json();
+      
+        if (response.ok) {
+          alert(`¡Bienvenido ${data.usuario}! Rol: ${data.rol}`);
+          // Aquí podrías redireccionar al dashboard real:
+          // window.location.href = '/dashboard.html';
+        } else {
+          alert('Error: ' + data.mensaje);
+        }
+      } catch (error) {
+        console.error('Error en la conexión:', error);
+        alert('No se pudo conectar con el servidor.');
+      }
+    });
+  </script>
 </body>
 </html>
