@@ -15,7 +15,8 @@ app.use(express.json());
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    family: 4
+    family: 4,
+    host: 'db.mhzuhpuhymhiklfsehnd.supabase.co'
 });
 
 pool.connect((err) => {
