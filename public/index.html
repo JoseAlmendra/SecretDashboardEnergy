@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Hotel Energy Login</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* Fondo animado suave */
+    body {
+      background: radial-gradient(circle at top, #0f172a, #020617);
+      overflow: hidden;
+    }
+
+    .float {
+      animation: float 6s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .fade-in {
+      animation: fadeIn 1s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .glow {
+      box-shadow: 0 0 40px rgba(59,130,246,0.2);
+    }
+  </style>
+</head>
+
+<body class="flex items-center justify-center h-screen text-white">
+
+  <!-- Fondo decorativo -->
+  <div class="absolute w-96 h-96 bg-blue-500 blur-3xl opacity-20 rounded-full top-10 left-10"></div>
+  <div class="absolute w-96 h-96 bg-purple-500 blur-3xl opacity-20 rounded-full bottom-10 right-10"></div>
+
+  <!-- Login card -->
+  <div class="fade-in float w-[380px] p-8 rounded-2xl bg-slate-900/70 backdrop-blur-md border border-slate-700 glow">
+
+    <h1 class="text-2xl font-bold text-center mb-6">
+      Hotel Energy System
+    </h1>
+
+    <p class="text-sm text-gray-400 text-center mb-6">
+      Inicia sesión para continuar
+    </p>
+
+    <form class="space-y-4">
+
+      <input
+        id="nombre"
+        type="text"
+        placeholder="Usuario"
+        class="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      <input
+        id="password" 
+        type="password"
+        placeholder="Contraseña"
+        class="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      <button
+        type="submit"
+        class="w-full p-3 rounded-lg bg-blue-600 hover:bg-blue-500 transition-all font-semibold"
+      >
+        Entrar
+      </button>
+
+    </form>
+
+    <p class="text-xs text-center text-gray-500 mt-4">
+      Sistema de monitoreo energético
+    </p>
+
+  </div>
+  <script>
+    const form = document.querySelector('form');
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); // Evita que la página se recargue
+
+      const nombre = document.getElementById('nombre').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        // Enviamos los datos a tu servidor en Render
+        const response = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          alert(`¡Bienvenido ${data.usuario}! Rol: ${data.rol}`);
+          // Aquí podrías redireccionar al dashboard real:
+          // window.location.href = '/dashboard.html';
+        } else {
+          alert('Error: ' + data.mensaje);
+        }
+      } catch (error) {
+        console.error('Error en la conexión:', error);
+        alert('No se pudo conectar con el servidor.');
+      }
+    });
+  </script>
+</body>
+</html>

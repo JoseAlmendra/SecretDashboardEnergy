@@ -1,0 +1,68 @@
+require('dotenv').config();
+const dns = require('dns');
+
+// Esto obliga a Node.js a buscar direcciones IPv4 antes que IPv6
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
+
+const express = require('express');
+const { Pool } = require('pg');
+const path = require('path');
+
+const app = express();
+
+// Creamos un objeto de configuración que extrae los datos de la URL de Render
+const connectionString = process.env.DATABASE_URL;
+
+const pool = new Pool({
+    connectionString: connectionString,
+    // Forzamos el usuario largo si la URL no se parsea bien
+    user: connectionString.split('://')[1].split(':')[0], 
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
+
+pool.connect((err, client, release) => {
+    if (err) {
+        return console.error('Fallo de conexión:', err.stack);
+    }
+    console.log('Conexión con Supabase exitosa.');
+    release();
+});
+
+console.log(process.env.DATABASE_URL);
+
+app.use(express.json());
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+// 4. Ruta de Login
+app.post('/login', async (req, res) => {
+  const { nombre, password } = req.body;
+  try {
+    const query = 'SELECT * FROM usuarios WHERE nombre = $1 AND password = $2';
+    const result = await pool.query(query, [nombre, password]);
+
+    if (result.rows.length > 0) {
+      res.json({ 
+        mensaje: "Bienvenido", 
+        usuario: result.rows[0].nombre,
+        rol: result.rows[0].rol 
+      });
+    } else {
+      res.status(401).json({ mensaje: "Credenciales incorrectas" });
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ mensaje: "Error en el servidor" });
+  }
+});
+
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
+    console.log(`Servidor en puerto ${PORT}`);
+});
