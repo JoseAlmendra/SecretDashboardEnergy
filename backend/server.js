@@ -6,8 +6,14 @@ const supabase = require('./supabaseClient');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+let sectoresConectados = {
+    operador: [],
+    administrador: [],
+    gerencia: []
+};
 
 app.get('/', (req, res) => {
     res.json({
@@ -35,6 +41,121 @@ app.get('/api/mes', async (req, res) => {
 
     } catch (err) {
         console.error("Error en el servidor durante la obtención de lecturas:", err);
+        return res.status(500).json({ error: 'Error interno en el servidor.' });
+    }
+});
+
+app.get('/api/alertas/stream', (req, res) => {
+    const rolUsuario = req.query.rol || 'operador'; // Detecta qué sector es
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Validar que el sector exista en nuestro mapa y añadir al cliente
+    if (sectoresConectados[rolUsuario]) {
+        sectoresConectados[rolUsuario].push(res);
+        console.log(`--> Nuevo dispositivo conectado al sector: [${rolUsuario}]`);
+    }
+
+    req.on('close', () => {
+        if (sectoresConectados[rolUsuario]) {
+            sectoresConectados[rolUsuario] = sectoresConectados[rolUsuario].filter(c => c !== res);
+            console.log(`--> Dispositivo desconectado del sector: [${rolUsuario}]`);
+        }
+    });
+});
+
+// 🚀 2. Endpoint POST unificado para disparar y escoger el tipo y el sector destino
+app.post('/api/alertas/disparar', (req, res) => {
+    try {
+        const { tipo, mensaje, sectorDestino } = req.body;
+
+        // Validaciones básicas de los estados que definimos en el operador
+        if (!tipo || !mensaje || !sectorDestino) {
+            return res.status(400).json({ error: 'Faltan campos obligatorios: tipo, mensaje o sectorDestino.' });
+        }
+
+        // Estructura del evento a transmitir
+        const payloadAlerta = { tipo, mensaje };
+
+        if (sectorDestino === 'todos') {
+            // Enviar a absolutamente todos los sectores del hotel
+            Object.keys(sectoresConectados).forEach(sector => {
+                sectoresConectados[sector].forEach(cliente => {
+                    cliente.write(`data: ${JSON.stringify(payloadAlerta)}\n\n`);
+                });
+            });
+            return res.json({ mensaje: 'Notificación global enviada a todos los sectores.' });
+        } 
+        
+        if (sectoresConectados[sectorDestino]) {
+            // Enviar únicamente al sector específico seleccionado
+            sectoresConectados[sectorDestino].forEach(cliente => {
+                cliente.write(`data: ${JSON.stringify(payloadAlerta)}\n\n`);
+            });
+            return res.json({ mensaje: `Notificación enviada exclusivamente al sector: ${sectorDestino}` });
+        }
+
+        return res.status(400).json({ error: 'El sector especificado no es válido.' });
+
+    } catch (err) {
+        console.error("Error al disparar alerta global:", err);
+        return res.status(500).json({ error: 'Error interno del servidor.' });
+    }
+});
+
+app.post('/api/registrar', async (req, res) => {
+    try {
+        const { kwh, kvarh, kw, fecha_id, operador_id, foto_b64 } = req.body;
+
+        // 1. Validar que vengan los datos obligatorios
+        if (!kwh || !kvarh || !kw || !fecha_id) {
+            return res.status(400).json({ error: 'Todos los campos numéricos y la fecha son obligatorios.' });
+        }
+
+        // 2. Consultar cuántos chequeos ya existen hoy para calcular el 'num_chequeo' correlativo (turno 1, 2 o 3)
+        const { data: existentes, error: errorConteo } = await supabase
+            .from('lecturas_medidor')
+            .select('id')
+            .eq('fecha_id', fecha_id);
+
+        if (errorConteo) throw errorConteo;
+        
+        const siguienteChequeo = (existentes ? existentes.length : 0) + 1;
+
+        if (siguienteChequeo > 3) {
+            return res.status(400).json({ error: 'Ya se han completado los 3 chequeos máximos para el día de hoy.' });
+        }
+
+        // 3. Insertar el nuevo registro en Supabase
+        const { data: nuevaLectura, error: errorInsert } = await supabase
+            .from('lecturas_medidor')
+            .insert([
+                {
+                    fecha_id: fecha_id,
+                    num_chequeo: siguienteChequeo,
+                    kwh: parseFloat(kwh),
+                    kvarh: parseFloat(kvarh),
+                    kw: parseFloat(kw),
+                    operador_id: operador_id ? parseInt(operador_id) : null,
+                    foto_url: foto_b64 || null // 💾 Almacena los bits en formato texto listo para el Front
+                }
+            ])
+            .select();
+
+        if (errorInsert) {
+            console.error("--> Error de Supabase al insertar lectura:", errorInsert.message);
+            return res.status(500).json({ error: 'Error al insertar el registro en la base de datos.' });
+        }
+
+        return res.json({
+            mensaje: '¡Lectura guardada con éxito!',
+            registro: nuevaLectura[0]
+        });
+
+    } catch (err) {
+        console.error("Error en el servidor durante el registro de lectura:", err);
         return res.status(500).json({ error: 'Error interno en el servidor.' });
     }
 });

@@ -1,11 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom'; // 📦 Importamos ReactDOM para usar Portals
+import Loading from './Loading';
+
+function NotificacionToast({ tipo, mensaje, alCerrar, ocultando }) {
+  if (!mensaje) return null;
+
+  const esError = tipo === 'error';
+  const icono = esError ? '⚠️' : '✅';
+  const titulo = esError ? 'Error de Envío' : 'Registro subido exitosamente';
+  
+  // Paletas de color según el estado
+  const backgroundColor = esError ? '#fff3f3' : '#f0fdf4';
+  const borderColor = esError ? '#f5c2c2' : '#bbf7d0';
+  const tituloColor = esError ? '#d9383a' : '#15803d';
+  const shadowColor = esError ? 'rgba(217, 56, 58, 0.15)' : 'rgba(21, 128, 61, 0.12)';
+
+  return ReactDOM.createPortal(
+    <div 
+      style={{
+        position: 'fixed',
+        top: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: backgroundColor,
+        border: `1px solid ${borderColor}`,
+        borderRadius: '8px',
+        padding: '14px 20px',
+        width: '90%',
+        maxWidth: '400px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: `0 8px 20px ${shadowColor}`,
+        boxSizing: 'border-box',
+        zIndex: 100000
+      }} 
+      className={ocultando ? "toast-salida" : "toast-entrada"}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+        <span style={{ fontSize: '20px' }}>{icono}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+          <strong style={{ fontSize: '14px', color: tituloColor }}>{titulo}</strong>
+          <span style={{ fontSize: '12px', color: '#495057' }}>{mensaje}</span>
+        </div>
+      </div>
+      <button 
+        onClick={alCerrar} 
+        style={{
+          backgroundColor: 'transparent',
+          border: 'none',
+          fontSize: '16px',
+          color: '#868e96',
+          cursor: 'pointer',
+          padding: '4px 8px',
+          fontWeight: 'bold'
+        }}
+      >✕</button>
+    </div>,
+    document.body
+  );
+}
 
 function DashboardOperador({ usuario }) {
   const [diasRevisados, setDiasRevisados] = useState([]);
   const [conteoDias, setConteoDias] = useState({});
   const [mostrarDialogo, setMostrarDialogo] = useState(false); 
   const [mostrarDialogoFiltros, setMostrarDialogoFiltros] = useState(false);
+
+  const [enviandoDatos, setEnviandoDatos] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ tipo: '', mensaje: null }); // { tipo: 'error'|'exito', mensaje: '...' }
+  const [ocultandoToast, setOcultandoToast] = useState(false);
 
   const [formLectura, setFormLectura] = useState({
     kwh: '',
@@ -24,21 +88,6 @@ function DashboardOperador({ usuario }) {
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
   ];
-
-  useEffect(() => {
-    const totalDiasMes = new Date(añoActual, mesActual + 1, 0).getDate();
-    const mockRevisados = [];
-    
-    for (let d = 1; d <= totalDiasMes; d++) {
-      if (d < fechaActual.getDate() && Math.random() > 0.4) {
-        const mesFormateado = String(mesActual + 1).padStart(2, '0');
-        const diaFormateado = String(d).padStart(2, '0');
-        mockRevisados.push(`${añoActual}-${mesFormateado}-${diaFormateado}`);
-      }
-    }
-    mockRevisados.push(hoyStr); 
-    setDiasRevisados(mockRevisados);
-  }, []);
 
   useEffect(() => {
     fetch('http://192.168.1.65:5000/api/mes')
@@ -60,6 +109,37 @@ function DashboardOperador({ usuario }) {
         console.error("Error al traer las lecturas del medidor:", err);
       });
   }, []);
+
+  useEffect(() => {
+    // Tomamos el rol directamente del usuario autenticado (ej: 'operador' o 'administrador')
+    const rolUsuario = usuario?.rol || 'operador';
+    
+    // Abrimos el canal persistente HTTP inyectándole la query string con el sector correspondiente
+    const eventSource = new EventSource(`http://192.168.1.65:5000/api/alertas/stream?rol=${rolUsuario}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const datosAlerta = JSON.parse(event.data);
+        
+        // Disparar nuestro Toast dinámicamente según lo dictado por el Servidor
+        setToastConfig({
+          tipo: datosAlerta.tipo,     // 'exito' o 'error'
+          mensaje: datosAlerta.mensaje // Mensaje personalizado de la alerta hotelera
+        });
+      } catch (err) {
+        console.error("Error decodificando alerta SSE:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("Fallo o reconexión automática en el canal de alertas SSE:", err);
+    };
+
+    // Limpieza de hilos de red al desmontar el dashboard
+    return () => {
+      eventSource.close();
+    };
+  }, [usuario]);
 
   // --- LÓGICA DE CALENDARIO NATIVO ---
   const primerDiaSemana = new Date(añoActual, mesActual, 1).getDay();
@@ -94,37 +174,126 @@ function DashboardOperador({ usuario }) {
     }));
   };
 
+  const procesarYComprimirImagen = (archivo) => {
+    return new Promise((resolve) => {
+      const lector = new FileReader();
+      lector.readAsDataURL(archivo);
+      lector.onload = (evento) => {
+        const img = new Image();
+        img.src = evento.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_ANCHO = 900; // Redolución óptima para visualización rápida en sistema
+          let ancho = img.width;
+          let alto = img.height;
+
+          if (ancho > MAX_ANCHO) {
+            alto = Math.round((alto * MAX_ANCHO) / ancho);
+            ancho = MAX_ANCHO;
+          }
+
+          canvas.width = ancho;
+          canvas.height = alto;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, ancho, alto);
+
+          // Exportación comprimida al 60% de calidad en formato JPEG
+          let base64Comprimido = canvas.toDataURL('image/avif', 0.35);
+
+          if (base64Comprimido.startsWith('data:image/png')) {
+            console.warn("--> El navegador no soporta AVIF nativo. Aplicando respaldo en WebP.");
+            base64Comprimido = canvas.toDataURL('image/webp', 0.40);
+          } else {
+            console.log("--> ¡Imagen comprimida exitosamente usando AVIF experimental!");
+          }
+          resolve(base64Comprimido);
+        };
+      };
+    });
+  };
+
   // Manejador del archivo de imagen adjunto
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImagenMedidor(file);
-      setVistaPreviaUrl(URL.createObjectURL(file));
+      setVistaPreviaUrl(URL.createObjectURL(file)); // Muestra la previsualización al instante
+      
+      // Iniciamos compresión en background y guardamos el String de texto resultante
+      const bitsComprimidos = await procesarYComprimirImagen(file);
+      setImagenMedidor(bitsComprimidos);
     }
   };
 
+  const cerrarToast = () => {
+    setOcultandoToast(true);
+    setTimeout(() => {
+      setToastConfig({ tipo: '', mensaje: null });
+      setOcultandoToast(false);
+    }, 400); 
+  };
   // Manejador del envío del formulario
   const handleFormSubmit = (e) => {
     e.preventDefault();
+    setEnviandoDatos(true); // Activa el loading y oscurece el modal
+    setToastConfig({ tipo: '', mensaje: null });
+
     console.log("Datos de lectura enviados:", formLectura);
     console.log("Archivo de imagen adjunto:", imagenMedidor);
     
-    setConteoDias(prev => ({
-      ...prev,
-      [hoyStr]: Math.min((prev[hoyStr] || 0) + 1, 3) // Máximo 3 registros por día
-    }));
+    const payload = {
+      kwh: formLectura.kwh,
+      kvarh: formLectura.kvarh,
+      kw: formLectura.kw,
+      fecha_id: hoyStr,
+      operador_id: usuario?.id || null,
+      foto_b64: imagenMedidor // Aquí van los bits comprimidos en formato string
+    };
 
-    // Aquí puedes enlazar tu petición HTTP al backend (POST)
-    setConteoDias(prev => ({
-      ...prev,
-      [hoyStr]: Math.min((prev[hoyStr] || 0) + 1, 3) // Máximo 3 registros por día
-    }));
+    fetch('http://192.168.1.65:5000/api/registrar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(res => {
+        if (!res.ok) {
+          return res.json().then(err => { throw new Error(err.error || 'Error al guardar el registro') });
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log("¡Éxito!", data.mensaje);
 
-    // Resetear estados y cerrar diálogo
-    setFormLectura({ kwh: '', kvarh: '', kw: '' });
-    setImagenMedidor(null);
-    setVistaPreviaUrl('');
-    setMostrarDialogo(false);
+        // Actualizamos visualmente el mapa de conteos sumando +1 al día actual de forma segura
+        setConteoDias(prev => ({
+          ...prev,
+          [hoyStr]: Math.min((prev[hoyStr] || 0) + 1, 3)
+        }));
+
+        setToastConfig({
+          tipo: 'exito',
+          mensaje: 'Los datos del medidor se guardaron con éxito.'
+        });
+
+        // Resetear estados y cerrar diálogo modal[cite: 3]
+        setFormLectura({ kwh: '', kvarh: '', kw: '' }); //[cite: 3]
+        setImagenMedidor(null); //[cite: 3]
+        setVistaPreviaUrl(''); //[cite: 3]
+        setMostrarDialogo(false); //[cite: 3]
+      })
+      .catch(err => {
+        console.error("Error al guardar el registro en el servidor:", err);
+        alert(`No se pudo guardar el registro: ${err.message}`);
+        setToastConfig({
+          tipo: 'error',
+          mensaje: err.message
+        });
+      })
+      .finally(() => {
+        setEnviandoDatos(false); 
+      });
   };
 
   const obtenerColorCelda = (cantidad) => {
@@ -144,6 +313,30 @@ function DashboardOperador({ usuario }) {
 
   return (
     <>
+      <style>{`
+        @keyframes slideInToast {
+          from { transform: translate(-50%, -100px); opacity: 0; }
+          to { transform: translate(-50%, 20px); opacity: 1; }
+        }
+        @keyframes slideOutToast {
+          from { transform: translate(-50%, 20px); opacity: 1; }
+          to { transform: translate(-50%, -100px); opacity: 0; }
+        }
+        .toast-entrada {
+          animation: slideInToast 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        .toast-salida {
+          animation: slideOutToast 0.4s ease-in forwards;
+        }
+      `}</style>
+
+      <NotificacionToast 
+        tipo={toastConfig.tipo}
+        mensaje={toastConfig.mensaje}
+        alCerrar={cerrarToast}
+        ocultando={ocultandoToast}
+      />
+
       <div style={styles.heatmapCardContenedor}>
         <button 
           style={styles.botonAccionSuperior} 
@@ -222,91 +415,66 @@ function DashboardOperador({ usuario }) {
 
       {/* 🥞 PORTAL PARA EL DIÁLOGO DE LECTURAS (HOY) */}
       {mostrarDialogo && ReactDOM.createPortal(
-        <div style={styles.overlayModal} onClick={() => setMostrarDialogo(false)}>
-          <div style={styles.dialogoBox} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.overlayModal} onClick={() => !enviandoDatos && setMostrarDialogo(false)}>
+          <div style={{
+            ...styles.dialogoBox,
+            position: 'relative',
+            transition: 'all 0.3s ease',
+            backgroundColor: enviandoDatos ? '#e9ecef' : '#ffffff', // Se oscurece sutilmente al enviar
+            opacity: enviandoDatos ? 0.9 : 1
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* 🌟 CAPA LOADER INTERNA */}
+            {enviandoDatos && (
+              <div style={styles.capaBloqueoLector}>
+                <Loading texto="Guardando registros..." />
+              </div>
+            )}
+
             <h3 style={styles.dialogoTitulo}>Ingresar Lecturas del Día</h3>
             <p style={styles.dialogoTexto}>Por favor, introduce los valores actuales medidos en el tablero principal.</p>
             
             <form onSubmit={handleFormSubmit} style={styles.formularioGrid}>
-              
               <div style={styles.grupoInput}>
                 <label style={styles.labelForm}>Consumo Energía Activa (kWh)</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  name="kwh"
-                  required
-                  placeholder="Ej. 12450.5"
-                  value={formLectura.kwh}
-                  onChange={handleInputChange}
-                  style={styles.inputStyle}
-                />
+                <input type="number" step="any" name="kwh" required disabled={enviandoDatos} value={formLectura.kwh} onChange={handleInputChange} style={styles.inputStyle} />
               </div>
-
               <div style={styles.grupoInput}>
                 <label style={styles.labelForm}>Energía Reactiva (kVArh)</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  name="kvarh"
-                  required
-                  placeholder="Ej. 3420.2"
-                  value={formLectura.kvarh}
-                  onChange={handleInputChange}
-                  style={styles.inputStyle}
-                />
+                <input type="number" step="any" name="kvarh" required disabled={enviandoDatos} value={formLectura.kvarh} onChange={handleInputChange} style={styles.inputStyle} />
               </div>
-
               <div style={styles.grupoInput}>
                 <label style={styles.labelForm}>Demanda Máxima (kW)</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  name="kw"
-                  required
-                  placeholder="Ej. 85.6"
-                  value={formLectura.kw}
-                  onChange={handleInputChange}
-                  style={styles.inputStyle}
-                />
+                <input type="number" step="any" name="kw" required disabled={enviandoDatos} value={formLectura.kw} onChange={handleInputChange} style={styles.inputStyle} />
               </div>
 
               <div style={styles.grupoInput}>
                 <label style={styles.labelForm}>Evidencia Fotográfica del Medidor</label>
                 <div style={styles.contenedorUpload}>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    id="foto-medidor"
-                    required={!imagenMedidor}
-                    onChange={handleFileChange}
-                    style={styles.fileInputOculto}
-                  />
-                  <label htmlFor="foto-medidor" style={styles.labelUploadBoton}>
-                    {imagenMedidor ? '🔄 Cambiar Imagen' : '📷 Seleccionar o Tomar Foto'}
+                  <input type="file" accept="image/*" id="foto-medidor" disabled={enviandoDatos} onChange={handleFileChange} style={styles.fileInputOculto} />
+                  <label htmlFor="foto-medidor" style={{...styles.labelUploadBoton, cursor: enviandoDatos ? 'not-allowed' : 'pointer'}}>
+                    {imagenMedidor ? '🔄 Cambiar Imagen' : '📷 Tomar Foto / Evidencia'}
                   </label>
-                  
                   {vistaPreviaUrl && (
                     <div style={styles.wrapperVistaPrevia}>
-                      <img src={vistaPreviaUrl} alt="Vista previa medidor" style={styles.imagenVistaPrevia} />
+                      <img src={vistaPreviaUrl} alt="Vista previa del tablero" style={styles.imagenVistaPrevia} />
                     </div>
                   )}
                 </div>
               </div>
 
               <div style={styles.contenedorAccionesForm}>
-                <button type="button" style={styles.botonCancelar} onClick={() => setMostrarDialogo(false)}>
+                <button type="button" disabled={enviandoDatos} style={styles.botonCancelar} onClick={() => setMostrarDialogo(false)}>
                   Cancelar
                 </button>
-                <button type="submit" style={styles.botonEnviar}>
+                <button type="submit" disabled={enviandoDatos} style={styles.botonEnviar}>
                   Guardar Registro
                 </button>
               </div>
-
             </form>
           </div>
         </div>,
-        document.body // Se inyecta al final del body de la app, rompiendo cualquier layout restrictivo
+        document.body
       )}
     </>
   );
@@ -590,6 +758,46 @@ const styles = {
     border: '1px solid rgba(0,0,0,0.05)',
     transition: 'transform 0.1s ease'
   },
+  capaBloqueoLector: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    borderRadius: '12px',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10
+  },
+  toastErrorNotificacion: {
+    position: 'fixed',
+    top: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    backgroundColor: '#fff3f3',
+    border: '1px solid #f5c2c2',
+    borderRadius: '8px',
+    padding: '14px 20px',
+    width: '90%',
+    maxWidth: '400px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    boxShadow: '0 8px 20px rgba(217, 56, 58, 0.15)',
+    boxSizing: 'border-box'
+  },
+  botonCerrarToast: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    fontSize: '16px',
+    color: '#868e96',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    fontWeight: 'bold',
+    transition: 'color 0.2s'
+  }
 };
 
 export default DashboardOperador;
